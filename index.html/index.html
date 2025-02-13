@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Continuous Pomodoro Timer</title>
+  <style>
+    /* Basic page styling */
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    h1 {
+      margin-bottom: 1rem;
+    }
+
+    #timer {
+      font-size: 6rem;
+      font-weight: bold;
+      margin-bottom: 1rem;
+    }
+
+    /* Focus (25 minutes) styling */
+    .focus {
+      color: #007BFF; /* Blue color */
+    }
+
+    /* Break (5 minutes) styling */
+    .break {
+      color: #FF0000; /* Red color */
+    }
+
+    /* Additional text or message */
+    #status {
+      font-size: 1.5rem;
+      font-weight: 500;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Continuous Pomodoro Timer</h1>
+  <div id="timer">00:00</div>
+  <div id="status">Focus / Break</div>
+
+  <!-- 1) Add two audio elements for chimes -->
+  <!--    Provide your own MP3 files named 'focus-end.mp3' and 'break-end.mp3' in the same folder -->
+  <audio id="focusEndAudio" src="focus-end.mp3" preload="auto"></audio>
+  <audio id="breakEndAudio" src="break-end.mp3" preload="auto"></audio>
+
+  <script>
+    // Grabs references to our displayed elements
+    const timerDisplay = document.getElementById('timer');
+    const statusDisplay = document.getElementById('status');
+
+    // Grabs references to our audio elements
+    const focusEndAudio = document.getElementById('focusEndAudio');
+    const breakEndAudio = document.getElementById('breakEndAudio');
+
+    // We'll track the old "focus/break" state to detect transitions
+    let oldIsFocus = null;  
+
+    // Helper function: zero-pad to 2 digits
+    function pad(num) {
+      return num < 10 ? '0' + num : num;
+    }
+
+    /**
+     * Calculate how many seconds remain until the next boundary (either 25 or 30 minutes past the hour,
+     * then 55 or top of the hour).
+     *
+     * Returns an object:
+     *   { secondsLeft: number, isFocus: boolean }
+     */
+    function getTimeToNextBoundary() {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMin = now.getMinutes();
+      const currentSec = now.getSeconds();
+
+      // We break each hour into two 30-minute blocks:
+      //   Block 1: :00 -> :25 (focus), :25 -> :30 (break)
+      //   Block 2: :30 -> :55 (focus), :55 -> :00 next hour (break)
+      //
+      // Let's figure out which block we're in:
+      const mod30 = currentMin % 30;
+
+      let isFocus = true;
+      let nextHour = currentHour;
+      let nextMin;
+
+      if (mod30 < 25) {
+        // 25-minute focus period
+        isFocus = true;
+        // Next boundary is XX:25 if in the first block, or XX:55 if in the second block.
+        const base30 = Math.floor(currentMin / 30) * 30; // Either 0 or 30
+        nextMin = base30 + 25;
+        if (nextMin >= 60) {
+          nextMin -= 60;
+          nextHour += 1;
+        }
+      } else {
+        // 5-minute break period
+        isFocus = false;
+        // Next boundary is XX:30 if in the first block, or the next hour if in the second block
+        const base30 = Math.floor(currentMin / 30) * 30;
+        nextMin = base30 + 30;
+        if (nextMin >= 60) {
+          nextMin -= 60;
+          nextHour += 1;
+        }
+      }
+
+      // Construct the target time and find the difference
+      const nextBoundary = new Date();
+      nextBoundary.setHours(nextHour, nextMin, 0, 0);
+
+      const diffMs = nextBoundary - now;
+      const diffSec = Math.floor(diffMs / 1000);
+
+      return {
+        secondsLeft: diffSec,
+        isFocus
+      };
+    }
+
+    function updateTimer() {
+      // Get how many seconds remain & whether we're in focus or break
+      const { secondsLeft, isFocus } = getTimeToNextBoundary();
+      const timeLeft = secondsLeft > 0 ? secondsLeft : 0;
+
+      // Detect boundary transition:
+      // If 'isFocus' just flipped from true->false, that means focus ended (play focus chime).
+      // If 'isFocus' just flipped from false->true, that means break ended (play break chime).
+      if (oldIsFocus !== null && oldIsFocus !== isFocus) {
+        if (oldIsFocus === true && isFocus === false) {
+          // Focus -> Break
+          // 25 minutes just ended
+          focusEndAudio.play();
+        } else if (oldIsFocus === false && isFocus === true) {
+          // Break -> Focus
+          // 5 minutes just ended
+          breakEndAudio.play();
+        }
+      }
+      // Update our old state
+      oldIsFocus = isFocus;
+
+      // Convert total seconds => MM:SS
+      const minutes = Math.floor(timeLeft / 60);
+      const seconds = timeLeft % 60;
+      timerDisplay.textContent = pad(minutes) + ":" + pad(seconds);
+
+      // Update styling based on focus or break
+      if (isFocus) {
+        timerDisplay.classList.add('focus');
+        timerDisplay.classList.remove('break');
+        statusDisplay.textContent = "Focus Time";
+      } else {
+        timerDisplay.classList.add('break');
+        timerDisplay.classList.remove('focus');
+        statusDisplay.textContent = "Break Time";
+      }
+    }
+
+    // Initialize
+    updateTimer();
+
+    // Update every second
+    setInterval(updateTimer, 1000);
+  </script>
+</body>
+</html>
